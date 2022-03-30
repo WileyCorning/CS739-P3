@@ -24,33 +24,35 @@
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/health_check_service_interface.h>
 
-#ifdef BAZEL_BUILD
-#include "examples/protos/helloworld.grpc.pb.h"
-#else
-#include "helloworld.grpc.pb.h"
-#endif
+#include "blockstorage.grpc.pb.h"
 
 using grpc::Server;
 using grpc::ServerBuilder;
 using grpc::ServerContext;
 using grpc::Status;
-using helloworld::Greeter;
-using helloworld::HelloReply;
-using helloworld::HelloRequest;
+using blockstorageproto::BlockStorage;
+using blockstorageproto::PingMessage;
+using blockstorageproto::ReadRequest;
+using blockstorageproto::ReadResponse;
+using blockstorageproto::WriteRequest;
+using blockstorageproto::WriteResponse;
 
 // Logic and data behind the server's behavior.
-class GreeterServiceImpl final : public Greeter::Service {
-  Status SayHello(ServerContext* context, const HelloRequest* request,
-                  HelloReply* reply) override {
-    std::string prefix("Hello ");
-    reply->set_message(prefix + request->name());
-    return Status::OK;
-  }
+class BlockStorageServiceImpl final : public BlockStorage::Service {
+    Status Ping(ServerContext* context, const PingMessage* request, PingMessage* reply) override {
+        return Status::OK;
+    }
+    Status Read(ServerContext* context, const ReadRequest* request, ReadResponse* reply) override {
+      return Status::OK;
+    }
+    Status Write(ServerContext* context, const WriteRequest* request, WriteResponse* reply) override {
+      return Status::OK;
+    }
 };
 
 void RunServer() {
   std::string server_address("0.0.0.0:50051");
-  GreeterServiceImpl service;
+  BlockStorageServiceImpl service;
 
   grpc::EnableDefaultHealthCheckService(true);
   grpc::reflection::InitProtoReflectionServerBuilderPlugin();

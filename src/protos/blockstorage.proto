@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package blockstorageproto;
+
+service BlockStorage {
+  rpc Ping (PingMessage) returns (PingMessage) {}
+  rpc Read (ReadRequest) returns (ReadResponse) {}
+  rpc Write (WriteRequest) returns (WriteResponse) {}
+}
+
+message PingMessage {
+}
+message ReadRequest {
+  string address = 1;
+}
+message ReadResponse {
+  bytes data = 1;
+}
+message WriteRequest {
+  string address = 1;
+  bytes data = 2;
+}
+message WriteResponse {
+}
