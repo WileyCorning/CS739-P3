@@ -183,8 +183,7 @@ int main(int argc, char** argv) {
     } else {
         target_str = "localhost:50051";
     }
-    BlockStorageClient client(
-        grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials()));
+    BlockStorageClient client(grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials()));
       
     std::chrono::nanoseconds ping_time;
     client.Ping(&ping_time);

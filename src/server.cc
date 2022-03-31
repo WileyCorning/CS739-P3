@@ -23,8 +23,8 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
 #include <iomanip>
+#include <iostream>
 #include <memory>
 #include <string>
 
@@ -37,6 +37,8 @@ using blockstorageproto::ReadRequest;
 using blockstorageproto::ReadResponse;
 using blockstorageproto::WriteRequest;
 using blockstorageproto::WriteResponse;
+using grpc::Channel;
+using grpc::ClientContext;
 using grpc::Server;
 using grpc::ServerBuilder;
 using grpc::ServerContext;
@@ -46,6 +48,15 @@ using std::endl;
 using std::string;
 
 #define BLOCK_SIZE 4096
+
+class ReplicationModule {
+   public:
+    ReplicationModule() {}
+    virtual ~ReplicationModule() {}
+    virtual void PingOnce() = 0;
+    virtual bool ShouldWriteLocally() { return true; }
+    virtual void HandleWriteByClient(uint64_t addr, char* data, size_t length) = 0;
+};
 
 class DiskModule {
     fs::path root;
@@ -92,34 +103,34 @@ class DiskModule {
         // TODO replace with pread in a single file
         auto stable = get_main_path(std::to_string(address));
 
-        cout << "Addr " << address <<" to " << stable <<endl;
-  
-        char* buffer = new char[BLOCK_SIZE] {};
-        
+        cout << "Addr " << address << " to " << stable << endl;
+
+        char* buffer = new char[BLOCK_SIZE]{};
+
         if (fs::exists(stable)) {
             std::ifstream file(stable, std::ios::in | std::ios::binary);
             file.read(buffer, BLOCK_SIZE);  // todo handle file.fail()
-            if(file.fail()) {
-              cout << "Error reading file at " << stable.string() << endl;
+            if (file.fail()) {
+                cout << "Error reading file at " << stable.string() << endl;
             }
         } else {
-          cout << "No file at " << stable.string() << endl;
+            cout << "No file at " << stable.string() << endl;
         }
-        
+
         cout << "Read  " << std::hex;
-        for(int i = 0; i < 32; i++) {
-          cout << std::setfill('0') << std::setw(2) << (0xff & (unsigned int) buffer[i]) << " ";
+        for (int i = 0; i < 32; i++) {
+            cout << std::setfill('0') << std::setw(2) << (0xff & (unsigned int)buffer[i]) << " ";
         }
         cout << std::dec << endl;
 
-
-        return std::string(buffer, BLOCK_SIZE);
+        return string(buffer, BLOCK_SIZE);
     }
 };
 
 // Logic and data behind the server's behavior.
 class BlockStorageServiceImpl final : public BlockStorage::Service {
     DiskModule disk;
+    ReplicationModule* replication;
 
     Status Ping(ServerContext* context, const PingMessage* request, PingMessage* reply) override {
         return Status::OK;
@@ -142,12 +153,12 @@ class BlockStorageServiceImpl final : public BlockStorage::Service {
     }
 
    public:
-    BlockStorageServiceImpl(DiskModule disk) : disk(disk) {}
+    BlockStorageServiceImpl(DiskModule disk, ReplicationModule* replication) : disk(disk), replication(replication) {}
 };
 
-void RunServer(DiskModule disk) {
-    std::string server_address("0.0.0.0:50051");
-    BlockStorageServiceImpl service(disk);
+void RunServer(string port, DiskModule disk, ReplicationModule* replication) {
+    string server_address = "0.0.0.0:" + port;  // "0.0.0.0:50051"
+    BlockStorageServiceImpl service(disk, replication);
 
     grpc::EnableDefaultHealthCheckService(true);
     grpc::reflection::InitProtoReflectionServerBuilderPlugin();
@@ -161,22 +172,152 @@ void RunServer(DiskModule disk) {
     std::unique_ptr<Server> server(builder.BuildAndStart());
     std::cout << "Server listening on " << server_address << std::endl;
 
+    replication->PingOnce();
+
     // Wait for the server to shutdown. Note that some other thread must be
     // responsible for shutting down the server for this call to ever return.
     server->Wait();
 }
 
+class NoReplication : public ReplicationModule {
+   public:
+    NoReplication() {}
+    ~NoReplication() {}
+    void PingOnce() {}
+    bool ShouldWriteLocally() { return true; }
+    void HandleWriteByClient(uint64_t addr, char* data, size_t length) {}
+};
+
+class PrimaryReplication : public ReplicationModule {
+   private:
+    std::unique_ptr<BlockStorage::Stub> stub_;
+
+   public:
+    PrimaryReplication(string backupAddr) {
+        cout << "Initializing replication as Primary; Backup at " << backupAddr << endl;
+        stub_ = BlockStorage::NewStub(grpc::CreateChannel(backupAddr, grpc::InsecureChannelCredentials()));
+    }
+
+    ~PrimaryReplication() {}
+
+    void PingOnce() {
+        PingMessage request;
+        PingMessage reply;
+        Status status;
+        uint32_t retryCount = 0;
+
+        // Retry w backoff
+        do {
+            ClientContext context;
+            cout << "Attempting to ping the backup..." << endl;
+            status = stub_->Ping(&context, request, &reply);
+            if(status.ok()) {
+                break;
+            } else {
+                sleep(1);
+            }
+        } while(!status.ok());
+        cout << "Ping response received!" << endl;
+    }
+
+    bool ShouldWriteLocally() {
+        return true;  // TODO wait to write locally if currently reintegrating
+    }
+
+    void HandleWriteByClient(uint64_t addr, char* data, size_t length) {
+        // TODO send to backup
+    }
+};
+
+class BackupReplication : public ReplicationModule {
+   private:
+    std::unique_ptr<BlockStorage::Stub> stub_;
+
+   public:
+    BackupReplication(string primaryAddr) {
+        cout << "Initializing replication as Backup; Primary at " << primaryAddr << endl;
+        stub_ = BlockStorage::NewStub(grpc::CreateChannel(primaryAddr, grpc::InsecureChannelCredentials()));
+    }
+
+    ~BackupReplication() {}
+
+    void PingOnce() {
+        PingMessage request;
+        PingMessage reply;
+        Status status;
+        uint32_t retryCount = 0;
+
+        // Retry w backoff
+        do {
+            ClientContext context;
+            cout << "Attempting to ping the primary..." << endl;
+            status = stub_->Ping(&context, request, &reply);
+            if(status.ok()) {
+                break;
+            } else {
+                sleep(1);
+            }
+        } while(!status.ok());
+        cout << "Ping response received!" << endl;
+    }
+
+    bool ShouldWriteLocally() {
+        return false;  // TODO write locally if primary is offline
+    }
+
+    void HandleWriteByClient(uint64_t addr, char* data, size_t length) {
+        // TODO forward to primary if it is online
+    }
+};
+
+string argErrString(string name) {
+    return "Usage: " + name + " <port> ( standalone | primary --backup-address <backup-address> | backup --primary-address <primary-address> ) <root_folder> <temp_folder>";
+}
+
+ReplicationModule* GetReplicationModule(string name, char** argv, size_t idx) {
+    auto value = string(argv[idx]);
+    if (value == "standalone") return new NoReplication();
+    
+    auto flag = string(argv[idx+1]);
+    auto target = string(argv[idx+2]);
+    
+    if (value == "primary") {
+        if (flag != "--backup-address") {
+            throw std::runtime_error(argErrString(name));
+        }
+        return new PrimaryReplication(target);
+    }
+    
+    if (value == "backup") {
+        if (flag != "--primary-address") {
+            throw std::runtime_error(argErrString(name));
+        }
+        return new BackupReplication(target);
+    }
+    
+    throw std::runtime_error(argErrString(name));
+}
+
 int main(int argc, char** argv) {
-    if (argc != 3) {
-        cout << "Usage: " << argv[0] << " root_folder temp_folder" << endl;
+    string name = argv[0];
+
+    if (argc != 5 && argc != 7) {
+        cout << argErrString(name) << endl;
         return 1;
     }
 
-    auto root = fs::canonical(argv[1]);
-    auto temp = fs::canonical(argv[2]);
+    string port = argv[1];
+    
+    auto is_standalone = string(argv[2]) == "standalone";
+    size_t dir_idx = is_standalone ? 3 : 5;
+
+    auto root = fs::canonical(string(argv[dir_idx]));
+    auto temp = fs::canonical(string(argv[dir_idx + 1]));
 
     cout << "Serving files from " << root << "; temp is " << temp << endl;
 
-    RunServer(DiskModule(root, temp));
+    auto repl = GetReplicationModule(name, argv, 2);
+
+    RunServer(port, DiskModule(root, temp), repl);
     return 0;
 }

@@ -6,9 +6,12 @@ service BlockStorage {
   rpc Ping (PingMessage) returns (PingMessage) {}
   rpc Read (ReadRequest) returns (ReadResponse) {}
   rpc Write (WriteRequest) returns (WriteResponse) {}
+  rpc Heartbeat (HeartbeatMessage) returns (HeartbeatMessage) {}
 }
 
 message PingMessage {
+}
+message HeartbeatMessage {
 }
 message ReadRequest {
   uint64 address = 1;
