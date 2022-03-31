@@ -11,13 +11,13 @@ service BlockStorage {
 message PingMessage {
 }
 message ReadRequest {
-  string address = 1;
+  uint64 address = 1;
 }
 message ReadResponse {
   bytes data = 1;
 }
 message WriteRequest {
-  string address = 1;
+  uint64 address = 1;
   bytes data = 2;
 }
 message WriteResponse {

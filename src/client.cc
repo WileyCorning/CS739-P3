@@ -92,7 +92,7 @@ class BlockStorageClient {
         }
     }
 
-    void Write(std::string address, char* buffer, size_t n) {
+    void Write(uint64_t address, char* buffer, size_t n) {
       printf("in Write\n");
         if (n != BLOCK_SIZE) {
             throw std::runtime_error("Block size should be " + std::to_string(BLOCK_SIZE) + " (was " + std::to_string(n) + ")");
@@ -118,7 +118,7 @@ class BlockStorageClient {
         }
     }
 
-    void Read(std::string address, char* buffer, size_t n) {
+    void Read(uint64_t address, char* buffer, size_t n) {
       printf("in Read\n");
       
         if (n != BLOCK_SIZE) {
@@ -196,7 +196,7 @@ int main(int argc, char** argv) {
 
     std::memcpy(buffer_in, an_input_string.data(), an_input_string.length());
 
-    std::string addr("example_block");
+    uint64_t addr = 2022;
     client.Write(addr, buffer_in, BLOCK_SIZE);
     client.Read(addr, buffer_out, BLOCK_SIZE);
 

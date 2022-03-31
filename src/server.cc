@@ -75,9 +75,10 @@ class DiskModule {
    public:
     DiskModule(fs::path root, fs::path temp) : root(root), temp(temp) {}
 
-    void write_data(string address, string data) {
-        auto stable = get_main_path(address);
-        auto transient = get_temp_path(address);
+    void write_data(uint64_t address, string data) {
+        // TODO replace with pwrite in a single file
+        auto stable = get_main_path(std::to_string(address));
+        auto transient = get_temp_path(std::to_string(address));
 
         std::ofstream file;
         file.open(transient, std::ios::binary);  // todo handle file.fail()
@@ -87,8 +88,9 @@ class DiskModule {
         rename(transient.c_str(), stable.c_str());  // todo handle err
     }
 
-    string read_data(string address) {
-        auto stable = get_main_path(address);
+    string read_data(uint64_t address) {
+        // TODO replace with pread in a single file
+        auto stable = get_main_path(std::to_string(address));
 
         cout << "Addr " << address <<" to " << stable <<endl;
   
