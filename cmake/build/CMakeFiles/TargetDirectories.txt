@@ -1,5 +1,0 @@
-/mnt/c/Users/Wiley/home/uw/s4-2022-spring/739-distributed-systems/p3-repo/cmake/build/CMakeFiles/rebuild_cache.dir
-/mnt/c/Users/Wiley/home/uw/s4-2022-spring/739-distributed-systems/p3-repo/cmake/build/CMakeFiles/edit_cache.dir
-/mnt/c/Users/Wiley/home/uw/s4-2022-spring/739-distributed-systems/p3-repo/cmake/build/CMakeFiles/server.dir
-/mnt/c/Users/Wiley/home/uw/s4-2022-spring/739-distributed-systems/p3-repo/cmake/build/CMakeFiles/client.dir
-/mnt/c/Users/Wiley/home/uw/s4-2022-spring/739-distributed-systems/p3-repo/cmake/build/CMakeFiles/hw_grpc_proto.dir
