@@ -16,63 +16,165 @@
  *
  */
 
-#include <iostream>
-#include <memory>
-#include <string>
-
 #include <grpcpp/ext/proto_server_reflection_plugin.h>
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/health_check_service_interface.h>
 
-#include "blockstorage.grpc.pb.h"
+#include <exception>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <iomanip>
+#include <memory>
+#include <string>
 
-using grpc::Server;
-using grpc::ServerBuilder;
-using grpc::ServerContext;
-using grpc::Status;
+#include "cmake/build/blockstorage.grpc.pb.h"
+
+namespace fs = std::filesystem;
 using blockstorageproto::BlockStorage;
 using blockstorageproto::PingMessage;
 using blockstorageproto::ReadRequest;
 using blockstorageproto::ReadResponse;
 using blockstorageproto::WriteRequest;
 using blockstorageproto::WriteResponse;
+using grpc::Server;
+using grpc::ServerBuilder;
+using grpc::ServerContext;
+using grpc::Status;
+using std::cout;
+using std::endl;
+using std::string;
 
-// Logic and data behind the server's behavior.
-class BlockStorageServiceImpl final : public BlockStorage::Service {
-    Status Ping(ServerContext* context, const PingMessage* request, PingMessage* reply) override {
-        return Status::OK;
+#define BLOCK_SIZE 4096
+
+class DiskModule {
+    fs::path root;
+    fs::path temp;
+
+    fs::path get_main_path(string address) {
+        return get_path_safely(root, address);
     }
-    Status Read(ServerContext* context, const ReadRequest* request, ReadResponse* reply) override {
-      return Status::OK;
+
+    fs::path get_temp_path(string address) {
+        // todo support concurrent write to different tempfiles
+        return get_path_safely(temp, address);
     }
-    Status Write(ServerContext* context, const WriteRequest* request, WriteResponse* reply) override {
-      return Status::OK;
+
+    fs::path get_path_safely(fs::path parent, string address) {
+        auto normalized = (parent / address).lexically_normal();
+
+        // Check that this path is under our storage root
+        auto [a, b] = std::mismatch(parent.begin(), parent.end(), normalized.begin());
+        if (a != parent.end()) {
+            throw std::runtime_error("Normalized path is outside storage root");
+        }
+
+        return normalized;
+    }
+
+   public:
+    DiskModule(fs::path root, fs::path temp) : root(root), temp(temp) {}
+
+    void write_data(string address, string data) {
+        auto stable = get_main_path(address);
+        auto transient = get_temp_path(address);
+
+        std::ofstream file;
+        file.open(transient, std::ios::binary);  // todo handle file.fail()
+        file << data;
+        file.close();
+
+        rename(transient.c_str(), stable.c_str());  // todo handle err
+    }
+
+    string read_data(string address) {
+        auto stable = get_main_path(address);
+
+        cout << "Addr " << address <<" to " << stable <<endl;
+  
+        char* buffer = new char[BLOCK_SIZE] {};
+        
+        if (fs::exists(stable)) {
+            std::ifstream file(stable, std::ios::in | std::ios::binary);
+            file.read(buffer, BLOCK_SIZE);  // todo handle file.fail()
+            if(file.fail()) {
+              cout << "Error reading file at " << stable.string() << endl;
+            }
+        } else {
+          cout << "No file at " << stable.string() << endl;
+        }
+        
+        cout << "Read  " << std::hex;
+        for(int i = 0; i < 32; i++) {
+          cout << std::setfill('0') << std::setw(2) << (0xff & (unsigned int) buffer[i]) << " ";
+        }
+        cout << std::dec << endl;
+
+
+        return std::string(buffer, BLOCK_SIZE);
     }
 };
 
-void RunServer() {
-  std::string server_address("0.0.0.0:50051");
-  BlockStorageServiceImpl service;
+// Logic and data behind the server's behavior.
+class BlockStorageServiceImpl final : public BlockStorage::Service {
+    DiskModule disk;
 
-  grpc::EnableDefaultHealthCheckService(true);
-  grpc::reflection::InitProtoReflectionServerBuilderPlugin();
-  ServerBuilder builder;
-  // Listen on the given address without any authentication mechanism.
-  builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
-  // Register "service" as the instance through which we'll communicate with
-  // clients. In this case it corresponds to an *synchronous* service.
-  builder.RegisterService(&service);
-  // Finally assemble the server.
-  std::unique_ptr<Server> server(builder.BuildAndStart());
-  std::cout << "Server listening on " << server_address << std::endl;
+    Status Ping(ServerContext* context, const PingMessage* request, PingMessage* reply) override {
+        return Status::OK;
+    }
 
-  // Wait for the server to shutdown. Note that some other thread must be
-  // responsible for shutting down the server for this call to ever return.
-  server->Wait();
+    Status Read(ServerContext* context, const ReadRequest* request, ReadResponse* reply) override {
+        reply->set_data(disk.read_data(request->address()));
+        return Status::OK;
+    }
+
+    Status Write(ServerContext* context, const WriteRequest* request, WriteResponse* reply) override {
+        auto data_str = request->data();
+        if (data_str.length() != BLOCK_SIZE) {
+            return Status(grpc::StatusCode::INVALID_ARGUMENT, "Block size should be " + std::to_string(BLOCK_SIZE) + " (was " + std::to_string(data_str.length()) + ")");
+        }
+
+        disk.write_data(request->address(), request->data());
+
+        return Status::OK;
+    }
+
+   public:
+    BlockStorageServiceImpl(DiskModule disk) : disk(disk) {}
+};
+
+void RunServer(DiskModule disk) {
+    std::string server_address("0.0.0.0:50051");
+    BlockStorageServiceImpl service(disk);
+
+    grpc::EnableDefaultHealthCheckService(true);
+    grpc::reflection::InitProtoReflectionServerBuilderPlugin();
+    ServerBuilder builder;
+    // Listen on the given address without any authentication mechanism.
+    builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
+    // Register "service" as the instance through which we'll communicate with
+    // clients. In this case it corresponds to an *synchronous* service.
+    builder.RegisterService(&service);
+    // Finally assemble the server.
+    std::unique_ptr<Server> server(builder.BuildAndStart());
+    std::cout << "Server listening on " << server_address << std::endl;
+
+    // Wait for the server to shutdown. Note that some other thread must be
+    // responsible for shutting down the server for this call to ever return.
+    server->Wait();
 }
 
 int main(int argc, char** argv) {
-  RunServer();
+    if (argc != 3) {
+        cout << "Usage: " << argv[0] << " root_folder temp_folder" << endl;
+        return 1;
+    }
 
-  return 0;
+    auto root = fs::canonical(argv[1]);
+    auto temp = fs::canonical(argv[2]);
+
+    cout << "Serving files from " << root << "; temp is " << temp << endl;
+
+    RunServer(DiskModule(root, temp));
+    return 0;
 }
