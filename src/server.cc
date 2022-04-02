@@ -197,6 +197,14 @@ public:
 
     void read_data(uint64_t offset, char *out)
     {
+        // Usage example:
+        // FileStorage fs("output");
+        // char input[] = {'p', '0', 'q', 'v', 'w', '2'};
+        // int offset = 762;
+        // fs.write_data(offset, input);
+        // char output[BLOCK_SIZE];
+        // fs.read_data(offset, output);
+        
         mtx.lock();
         Block block;
         std::ifstream ifs(fileName, std::ios::binary | std::ios::in);
