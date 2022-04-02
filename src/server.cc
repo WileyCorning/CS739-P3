@@ -183,12 +183,12 @@ public:
     }
 
     // there's no need to handle crash during writes
-    void write_data(uint64_t offset, char data[])
+    void write_data(uint64_t offset, char *in)
     {
         mtx.lock();
         Block block;
         std::ofstream ofs(fileName, std::ios::binary | std::ios::out);
-        strcpy(block.data, data);
+        strcpy(block.data, in);
         ofs.seekp(offset, std::ios::beg);
         ofs.write(reinterpret_cast<char *>(&block), sizeof(block));
         ofs.close();
