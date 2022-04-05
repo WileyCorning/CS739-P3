@@ -2,7 +2,7 @@
 #define PRIMARYREPLICATION_HH
 
 #include "ReplicationModule.hh"
-#include "cmake/build/blockstorage.grpc.pb.h"
+#include "../cmake/build/blockstorage.grpc.pb.h"
 #include <string>
 #include <thread>
 using std::string;

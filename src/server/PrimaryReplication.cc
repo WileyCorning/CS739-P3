@@ -15,7 +15,7 @@
 #include <string>
 #include <thread>
 
-#include "cmake/build/blockstorage.grpc.pb.h"
+#include "../cmake/build/blockstorage.grpc.pb.h"
 
 namespace fs = std::filesystem;
 using blockstorageproto::BlockStorage;
@@ -95,6 +95,7 @@ bool PrimaryReplication::HeartbeatOnce() {
 }
 
 void PrimaryReplication::Initialize() {
+    std::cout << "Initialize!" <<endl;
     if(didStart) {
         throw new std::runtime_error("Replication module cannot initialize twice");
     }

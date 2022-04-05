@@ -14,7 +14,7 @@
 #include <shared_mutex>
 #include <thread>
 
-#include "cmake/build/blockstorage.grpc.pb.h"
+#include "../cmake/build/blockstorage.grpc.pb.h"
 
 namespace fs = std::filesystem;
 using blockstorageproto::BlockStorage;

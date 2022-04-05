@@ -32,7 +32,7 @@
 #include <string>
 #include <iomanip>
 
-#include "cmake/build/blockstorage.grpc.pb.h"
+#include "../cmake/build/blockstorage.grpc.pb.h"
 
 using blockstorageproto::BlockStorage;
 using blockstorageproto::PingMessage;

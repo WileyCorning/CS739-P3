@@ -2,7 +2,7 @@
 #define BACKUPREPLICATION_HH
 
 #include "ReplicationModule.hh"
-#include "cmake/build/blockstorage.grpc.pb.h"
+#include "../cmake/build/blockstorage.grpc.pb.h"
 #include <string>
 using std::string;
 using blockstorageproto::BlockStorage;

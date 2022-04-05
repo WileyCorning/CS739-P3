@@ -29,13 +29,13 @@
 #include <string>
 #include <thread>
 
-#include "CommonDefinitions.hh"
+#include "../shared/CommonDefinitions.hh"
 #include "BackupReplication.hh"
 #include "FileStorage.hh"
 #include "NoReplication.hh"
 #include "PrimaryReplication.hh"
 #include "ReplicationModule.hh"
-#include "cmake/build/blockstorage.grpc.pb.h"
+#include "../cmake/build/blockstorage.grpc.pb.h"
 
 namespace fs = std::filesystem;
 using blockstorageproto::BlockStorage;
@@ -103,7 +103,7 @@ void RunServer(string port, FileStorage *storage, ReplicationModule *replication
     // Finally assemble the server.
     std::unique_ptr<Server> server(builder.BuildAndStart());
     std::cout << "Server listening on " << server_address << std::endl;
-
+    
     replication->Initialize();
 
     // Wait for the server to shutdown. Note that some other thread must be

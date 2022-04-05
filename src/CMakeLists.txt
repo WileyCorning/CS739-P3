@@ -56,31 +56,5 @@ target_link_libraries(hw_grpc_proto
   ${_GRPC_GRPCPP}
   ${_PROTOBUF_LIBPROTOBUF})
 
-  
-
-#### Server
-add_executable(server server.cc
-        PrimaryReplication.cc
-        PrimaryReplication.cc
-        BackupReplication.cc
-        FileStorage.cc
-)
-target_link_libraries(
-        server
-        hw_grpc_proto
-        ${_REFLECTION}
-        ${_GRPC_GRPCPP}
-        ${_PROTOBUF_LIBPROTOBUF}
-)
-
-#### Client
-add_executable(client
-        client.cc
-)
-target_link_libraries(
-        client
-        hw_grpc_proto
-        ${_REFLECTION}
-        ${_GRPC_GRPCPP}
-        ${_PROTOBUF_LIBPROTOBUF}
-)
+add_subdirectory(server)
+add_subdirectory(client)
