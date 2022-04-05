@@ -1,0 +1,3 @@
+
+#define BLOCK_SIZE 4096
+#define STORAGE_FILE_SIZE_MB 1
