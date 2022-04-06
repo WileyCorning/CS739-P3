@@ -21,6 +21,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <utime.h>
+#include <time.h>
 
 #include <chrono>
 #include <ctime>
@@ -31,6 +32,8 @@
 #include <sstream>
 #include <string>
 #include <iomanip>
+#include <random>
+#include <vector>
 
 #include "../cmake/build/blockstorage.grpc.pb.h"
 
@@ -129,47 +132,108 @@ private:
     std::unique_ptr<BlockStorage::Stub> stub_;
 };
 
-void test(BlockStorageClient &client)
+// gererate a string of a specific length
+std::string strRand(int length)
 {
-    std::string an_input_string("This is tesing!!!");
+    char tmp;
+    std::string buffer;
 
-    char buffer_in[BLOCK_SIZE] = {};
-    char buffer_out[BLOCK_SIZE] = {};
+    std::random_device rd;
+    std::default_random_engine random(rd());
 
-    std::memcpy(buffer_in, an_input_string.data(), an_input_string.length());
-
-    uint64_t addr = 760124;
-    client.Write(addr, buffer_in, BLOCK_SIZE);
-    client.Read(addr, buffer_out, BLOCK_SIZE);
-
-    std::string returned(buffer_out, an_input_string.length());
-
-    std::cout << an_input_string << ":::" << returned << std::endl;
-
-    int k = an_input_string.length();
-
-    cout << "Sent " << std::hex;
-    for (int i = 0; i < k; i++)
+    for (int i = 0; i < length; i++)
     {
-        cout << std::setfill('0') << std::setw(2) << (0xff & (unsigned int)buffer_in[i]) << " ";
+        tmp = random() % 36;
+        if (tmp < 10)
+        {
+            tmp += '0';
+        }
+        else
+        {
+            tmp -= 10;
+            tmp += 'A';
+        }
+        buffer += tmp;
     }
-    cout << std::dec << endl;
+    return buffer;
+}
 
-    cout << "Got  " << std::hex;
-    for (int i = 0; i < k; i++)
+void readWriteBenchmark(BlockStorageClient &client, std::vector<std::string> &random_strs, std::vector<long> &random_offsets)
+{
+    // std::string an_input_string("This is tesing!!!");
+    for (size_t i = 0; i < random_strs.size(); i++)
     {
-        cout << std::setfill('0') << std::setw(2) << (0xff & (unsigned int)buffer_out[i]) << " ";
-    }
-    cout << std::dec << endl;
+        std::string an_input_string = random_strs[i];
+        char buffer_in[BLOCK_SIZE] = {};
+        char buffer_out[BLOCK_SIZE] = {};
 
-    printf("Sent [%s], got back [%s]\n", an_input_string.c_str(), returned.c_str());
+        std::memcpy(buffer_in, an_input_string.data(), an_input_string.length());
+
+        uint64_t addr = random_offsets[i];
+
+        auto start = std::chrono::high_resolution_clock::now();
+        client.Write(addr, buffer_in, BLOCK_SIZE);
+        client.Read(addr, buffer_out, BLOCK_SIZE);
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::milli> duration = end - start;
+
+        std::string returned(buffer_out, an_input_string.length());
+
+        if (an_input_string == returned)
+        {
+            cout << "String length: "<<an_input_string.length() << " write & read successful! and time spent: "<< duration.count() << " ms." << endl;
+        }
+        else
+        {
+            cout << "write & read don't match!" << endl;
+        }
+    }
+}
+
+void runTests(BlockStorageClient &client)
+{
+    std::vector<long> str_lengths = {10, 100, 500, 1000, 2000, 5000, 10000, 30000, 50000};
+    std::vector<std::string> random_strs;
+    std::vector<long> random_offsets;
+    for (auto &&i : str_lengths)
+    {
+        random_strs.push_back(strRand(i));
+    }
+    srand((unsigned)time(NULL));
+    for (int i = 0; i < str_lengths.size(); i++)
+    {
+        random_offsets.push_back(rand()%10000);
+    }
+
+    readWriteBenchmark(client, random_strs, random_offsets);
+
+    // long [9] = {};
+    // string
+    // long offsets[]
+
+    // int k = an_input_string.length();
+
+    // cout << "Sent " << std::hex;
+    // for (int i = 0; i < k; i++)
+    // {
+    //     cout << std::setfill('0') << std::setw(2) << (0xff & (unsigned int)buffer_in[i]) << " ";
+    // }
+    // cout << std::dec << endl;
+
+    // cout << "Got  " << std::hex;
+    // for (int i = 0; i < k; i++)
+    // {
+    //     cout << std::setfill('0') << std::setw(2) << (0xff & (unsigned int)buffer_out[i]) << " ";
+    // }
+    // cout << std::dec << endl;
+
+    // printf("Sent [%s], got back [%s]\n", an_input_string.c_str(), returned.c_str());
 }
 
 int main(int argc, char **argv)
 {
     std::string target_str(INSTANCE_6_IP);
     BlockStorageClient client(grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials()));
-
-    test(client);
+    runTests(client);
     return 0;
 }
