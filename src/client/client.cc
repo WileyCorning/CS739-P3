@@ -182,7 +182,7 @@ void readWriteBenchmark(BlockStorageClient &client, std::vector<std::string> &ra
 
         if (an_input_string == returned)
         {
-            cout << "String length: "<<an_input_string.length() << " write & read successful! and time spent: "<< duration.count() << " ms." << endl;
+            cout << "String length: " << an_input_string.length() << " write & read successful! and time spent: " << duration.count() << " ms." << endl;
         }
         else
         {
@@ -193,7 +193,7 @@ void readWriteBenchmark(BlockStorageClient &client, std::vector<std::string> &ra
 
 void runTests(BlockStorageClient &client)
 {
-    std::vector<long> str_lengths = {64, 256, 512, BLOCK_SIZE/4, BLOCK_SIZE/2, BLOCK_SIZE};
+    std::vector<long> str_lengths = {64, 256, 512, BLOCK_SIZE / 4, BLOCK_SIZE / 2, BLOCK_SIZE};
     std::vector<std::string> random_strs;
     std::vector<long> random_offsets;
     for (auto &&i : str_lengths)
@@ -203,7 +203,8 @@ void runTests(BlockStorageClient &client)
     srand((unsigned)time(NULL));
     for (int i = 0; i < str_lengths.size(); i++)
     {
-        random_offsets.push_back(rand());
+        random_offsets.push_back(rand()); // unaligned
+        // random_offsets.push_back(i * BLOCK_SIZE); // 4k-aligned
     }
 
     readWriteBenchmark(client, random_strs, random_offsets);
