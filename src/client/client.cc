@@ -34,6 +34,7 @@
 #include <iomanip>
 #include <random>
 #include <vector>
+#include <thread>
 
 #include "../cmake/build/blockstorage.grpc.pb.h"
 
@@ -159,6 +160,43 @@ std::string strRand(int length)
     return buffer;
 }
 
+void writeToZeroOffset(BlockStorageClient *client, char *buffer)
+{
+    client->Write(0, buffer, BLOCK_SIZE);
+}
+
+void consistencyTest(BlockStorageClient &client, std::vector<std::string> &random_strs)
+{
+    std::vector<std::thread> threads;
+    for (size_t i = 0; i < random_strs.size(); i++)
+    {
+        std::string an_input_string = random_strs[i];
+        char buffer_in[BLOCK_SIZE] = {};
+        std::memcpy(buffer_in, an_input_string.data(), an_input_string.length());
+        threads.push_back(std::thread(writeToZeroOffset, &client, buffer_in));
+    }
+
+    for (size_t i = 0; i < threads.size(); i++)
+    {
+        threads[i].join();
+    }
+
+    // returned string should match with one of the strings which was writtern by one thread
+    for (size_t i = 0; i < random_strs.size(); i++)
+    {
+        std::string an_input_string = random_strs[i];
+        char buffer_out[BLOCK_SIZE] = {};
+        client.Read(0, buffer_out, BLOCK_SIZE);
+        std::string returned(buffer_out, an_input_string.length());
+        if (returned == an_input_string)
+        {
+            cout << "Matched with " << i + 1 << "th string" << endl;
+            return;
+        }
+    }
+    cout << "No match" << endl;
+}
+
 void readWriteBenchmark(BlockStorageClient &client, std::vector<std::string> &random_strs, std::vector<long> &random_offsets)
 {
     // std::string an_input_string("This is tesing!!!");
@@ -207,7 +245,12 @@ void runTests(BlockStorageClient &client)
         // random_offsets.push_back(i * BLOCK_SIZE); // 4k-aligned
     }
 
-    readWriteBenchmark(client, random_strs, random_offsets);
+    // readWriteBenchmark(client, random_strs, random_offsets);
+    int testNum = 5;
+    for (size_t i = 0; i < testNum; i++)
+    {
+        consistencyTest(client, random_strs);
+    }
 
     // long [9] = {};
     // string
