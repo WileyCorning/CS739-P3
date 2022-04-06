@@ -59,6 +59,7 @@ using std::endl;
  * instance-5 : 34.125.29.150 - client
  * instance-6 : 34.102.79.216 - primary in the beginning
  * instance-7 : 34.134.7.170 - backup in the beginning
+ * ./server/server 5678 standalone fs_1
  */
 class BlockStorageClient
 {
@@ -192,7 +193,7 @@ void readWriteBenchmark(BlockStorageClient &client, std::vector<std::string> &ra
 
 void runTests(BlockStorageClient &client)
 {
-    std::vector<long> str_lengths = {10, 100, 500, 1000, 2000, 5000, 10000, 30000, 50000};
+    std::vector<long> str_lengths = {64, 256, 512, BLOCK_SIZE/4, BLOCK_SIZE/2, BLOCK_SIZE};
     std::vector<std::string> random_strs;
     std::vector<long> random_offsets;
     for (auto &&i : str_lengths)
@@ -202,7 +203,7 @@ void runTests(BlockStorageClient &client)
     srand((unsigned)time(NULL));
     for (int i = 0; i < str_lengths.size(); i++)
     {
-        random_offsets.push_back(rand()%10000);
+        random_offsets.push_back(rand());
     }
 
     readWriteBenchmark(client, random_strs, random_offsets);
