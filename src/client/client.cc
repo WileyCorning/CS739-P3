@@ -21,6 +21,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <utime.h>
+#include <time.h>
 
 #include <chrono>
 #include <ctime>
@@ -31,6 +32,9 @@
 #include <sstream>
 #include <string>
 #include <iomanip>
+#include <random>
+#include <vector>
+#include <thread>
 
 #include "../cmake/build/blockstorage.grpc.pb.h"
 
@@ -47,54 +51,29 @@ using std::cout;
 using std::endl;
 
 #define BLOCK_SIZE 4096
-#define DEBUG 1
+#define INSTANCE_6_IP "34.102.79.216:5678"
+#define INSTANCE_7_IP "34.134.7.170:5678"
+#define CRASH_IP "9.9.9.9"
 
-class BlockStorageClient {
-    void print_status(std::string of, Status status) {
-        if (status.ok()) {
-            printf("%s: RPC Success\n", of.c_str());
-        } else {
-            printf("%s: RPC Failed with code %d:\n\t%s", of.c_str(), status.error_code(), status.error_message().c_str());
-        }
-    }
+/**
+ *
+ * instance-5 : 34.125.29.150 - client
+ * instance-6 : 34.102.79.216 - primary in the beginning
+ * instance-7 : 34.134.7.170 - backup in the beginning
+ * ./server/server 5678 standalone fs_1
+ */
+class BlockStorageClient
+{
 
-   public:
+public:
     BlockStorageClient(std::shared_ptr<Channel> channel)
         : stub_(BlockStorage::NewStub(channel)) {}
 
-    int Ping(std::chrono::nanoseconds* round_trip_time) {
-        auto start = std::chrono::steady_clock::now();
-
-        PingMessage request;
-        PingMessage reply;
-        Status status;
-        uint32_t retryCount = 0;
-
-        // Retry w backoff
-        ClientContext context;
-        printf("Ping: Invoking RPC\n");
-        status = stub_->Ping(&context, request, &reply);
-
-        // Checking RPC Status
-        if (status.ok()) {
-            printf("Ping: RPC Success\n");
-            auto end = std::chrono::steady_clock::now();
-            *round_trip_time = end - start;
-#if DEBUG
-            std::chrono::duration<double, std::ratio<1, 1>> seconds = end - start;
-            printf("Ping: Exiting function (took %fs)\n", seconds.count());
-#endif
-            return 0;
-        } else {
-            printf("Ping: RPC failure\n");
-            printf("Ping: Exiting function\n");
-            return -1;
-        }
-    }
-
-    void Write(uint64_t address, char* buffer, size_t n) {
-      printf("in Write\n");
-        if (n != BLOCK_SIZE) {
+    void Write(uint64_t address, char *buffer, size_t n)
+    {
+        // printf("in Write\n");
+        if (n != BLOCK_SIZE)
+        {
             throw std::runtime_error("Block size should be " + std::to_string(BLOCK_SIZE) + " (was " + std::to_string(n) + ")");
         }
         WriteRequest request;
@@ -107,21 +86,21 @@ class BlockStorageClient {
         request.set_address(address);
         request.set_data(data_str);
 
-        printf("Read: Invoking RPC\n");
+        // printf("Write: Invoking RPC\n");
         status = stub_->Write(&context, request, &reply);
 
-#if DEBUG
-        print_status("Write", status);
-#endif
-        if(!status.ok()) {
-          throw std::runtime_error("Status wasn't ok");
+        if (!status.ok())
+        {
+            throw std::runtime_error("Status wasn't ok");
         }
     }
 
-    void Read(uint64_t address, char* buffer, size_t n) {
-      printf("in Read\n");
-      
-        if (n != BLOCK_SIZE) {
+    void Read(uint64_t address, char *buffer, size_t n)
+    {
+        // printf("in Read\n");
+
+        if (n != BLOCK_SIZE)
+        {
             throw std::runtime_error("Block size should be " + std::to_string(BLOCK_SIZE) + " (was " + std::to_string(n) + ")");
         }
 
@@ -130,94 +109,176 @@ class BlockStorageClient {
         Status status;
 
         ClientContext context;
-        
+
         request.set_address(address);
-        
-        printf("Read: Invoking RPC\n");
+
+        // printf("Read: Invoking RPC\n");
 
         status = stub_->Read(&context, request, &reply);
 
-#if DEBUG
-        print_status("Read", status);
-#endif
-        if(!status.ok()) {
-          throw std::runtime_error("Status wasn't ok");
+        if (!status.ok())
+        {
+            throw std::runtime_error("Status wasn't ok");
         }
         auto data_str = reply.data();
 
-        if (data_str.length() != BLOCK_SIZE) {
+        if (data_str.length() != BLOCK_SIZE)
+        {
             throw std::runtime_error("Received data block of wrong size: should be " + std::to_string(BLOCK_SIZE) + " (was " + std::to_string(data_str.length()) + ")");
         }
-        data_str.copy(buffer,n);
+        data_str.copy(buffer, n);
         // memcpy(buffer, data_str.data(), n);
     }
 
-   private:
+private:
     std::unique_ptr<BlockStorage::Stub> stub_;
 };
 
-int main(int argc, char** argv) {
-    // Instantiate the client. It requires a channel, out of which the actual RPCs
-    // are created. This channel models a connection to an endpoint specified by
-    // the argument "--target=" which is the only expected argument.
-    // We indicate that the channel isn't authenticated (use of
-    // InsecureChannelCredentials()).
-    std::string target_str;
-    std::string arg_str("--target");
-    if (argc > 1) {
-        std::string arg_val = argv[1];
-        size_t start_pos = arg_val.find(arg_str);
-        if (start_pos != std::string::npos) {
-            start_pos += arg_str.size();
-            if (arg_val[start_pos] == '=') {
-                target_str = arg_val.substr(start_pos + 1);
-            } else {
-                std::cout << "The only correct argument syntax is --target="
-                          << std::endl;
-                return 0;
-            }
-        } else {
-            std::cout << "The only acceptable argument is --target=" << std::endl;
-            return 0;
+// gererate a string of a specific length
+std::string strRand(int length)
+{
+    char tmp;
+    std::string buffer;
+
+    std::random_device rd;
+    std::default_random_engine random(rd());
+
+    for (int i = 0; i < length; i++)
+    {
+        tmp = random() % 36;
+        if (tmp < 10)
+        {
+            tmp += '0';
         }
-    } else {
-        target_str = "localhost:50051";
+        else
+        {
+            tmp -= 10;
+            tmp += 'A';
+        }
+        buffer += tmp;
     }
+    return buffer;
+}
+
+void writeToZeroOffset(BlockStorageClient *client, char *buffer)
+{
+    client->Write(0, buffer, BLOCK_SIZE);
+}
+
+void consistencyTest(BlockStorageClient &client, std::vector<std::string> &random_strs)
+{
+    std::vector<std::thread> threads;
+    for (size_t i = 0; i < random_strs.size(); i++)
+    {
+        std::string an_input_string = random_strs[i];
+        char buffer_in[BLOCK_SIZE] = {};
+        std::memcpy(buffer_in, an_input_string.data(), an_input_string.length());
+        threads.push_back(std::thread(writeToZeroOffset, &client, buffer_in));
+    }
+
+    for (size_t i = 0; i < threads.size(); i++)
+    {
+        threads[i].join();
+    }
+
+    // returned string should match with one of the strings which was writtern by one thread
+    for (size_t i = 0; i < random_strs.size(); i++)
+    {
+        std::string an_input_string = random_strs[i];
+        char buffer_out[BLOCK_SIZE] = {};
+        client.Read(0, buffer_out, BLOCK_SIZE);
+        std::string returned(buffer_out, an_input_string.length());
+        if (returned == an_input_string)
+        {
+            cout << "Matched with " << i + 1 << "th string" << endl;
+            return;
+        }
+    }
+    cout << "No match" << endl;
+}
+
+void readWriteBenchmark(BlockStorageClient &client, std::vector<std::string> &random_strs, std::vector<long> &random_offsets)
+{
+    // std::string an_input_string("This is tesing!!!");
+    for (size_t i = 0; i < random_strs.size(); i++)
+    {
+        std::string an_input_string = random_strs[i];
+        char buffer_in[BLOCK_SIZE] = {};
+        char buffer_out[BLOCK_SIZE] = {};
+
+        std::memcpy(buffer_in, an_input_string.data(), an_input_string.length());
+
+        uint64_t addr = random_offsets[i];
+
+        auto start = std::chrono::high_resolution_clock::now();
+        client.Write(addr, buffer_in, BLOCK_SIZE);
+        client.Read(addr, buffer_out, BLOCK_SIZE);
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::milli> duration = end - start;
+
+        std::string returned(buffer_out, an_input_string.length());
+
+        if (an_input_string == returned)
+        {
+            cout << "String length: " << an_input_string.length() << " write & read successful! and time spent: " << duration.count() << " ms." << endl;
+        }
+        else
+        {
+            cout << "write & read don't match!" << endl;
+        }
+    }
+}
+
+void runTests(BlockStorageClient &client)
+{
+    std::vector<long> str_lengths = {64, 256, 512, BLOCK_SIZE / 4, BLOCK_SIZE / 2, BLOCK_SIZE};
+    std::vector<std::string> random_strs;
+    std::vector<long> random_offsets;
+    for (auto &&i : str_lengths)
+    {
+        random_strs.push_back(strRand(i));
+    }
+    srand((unsigned)time(NULL));
+    for (int i = 0; i < str_lengths.size(); i++)
+    {
+        random_offsets.push_back(rand()); // unaligned
+        // random_offsets.push_back(i * BLOCK_SIZE); // 4k-aligned
+    }
+
+    // readWriteBenchmark(client, random_strs, random_offsets);
+    int testNum = 5;
+    for (size_t i = 0; i < testNum; i++)
+    {
+        consistencyTest(client, random_strs);
+    }
+
+    // long [9] = {};
+    // string
+    // long offsets[]
+
+    // int k = an_input_string.length();
+
+    // cout << "Sent " << std::hex;
+    // for (int i = 0; i < k; i++)
+    // {
+    //     cout << std::setfill('0') << std::setw(2) << (0xff & (unsigned int)buffer_in[i]) << " ";
+    // }
+    // cout << std::dec << endl;
+
+    // cout << "Got  " << std::hex;
+    // for (int i = 0; i < k; i++)
+    // {
+    //     cout << std::setfill('0') << std::setw(2) << (0xff & (unsigned int)buffer_out[i]) << " ";
+    // }
+    // cout << std::dec << endl;
+
+    // printf("Sent [%s], got back [%s]\n", an_input_string.c_str(), returned.c_str());
+}
+
+int main(int argc, char **argv)
+{
+    std::string target_str(INSTANCE_6_IP);
     BlockStorageClient client(grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials()));
-      
-    std::chrono::nanoseconds ping_time;
-    client.Ping(&ping_time);
-
-    std::string an_input_string("Example input string (hello world!)");
-
-    char buffer_in[BLOCK_SIZE] = {};
-    char buffer_out[BLOCK_SIZE] = {};
-
-    std::memcpy(buffer_in, an_input_string.data(), an_input_string.length());
-
-    uint64_t addr = 2022;
-    client.Write(addr, buffer_in, BLOCK_SIZE);
-    client.Read(addr, buffer_out, BLOCK_SIZE);
-
-    std::string returned(buffer_out, an_input_string.length());
-    
-    std::cout << an_input_string << ":::" << returned << std::endl;
-    
-    int k = an_input_string.length();
-    
-    cout << "Sent " << std::hex;
-    for(int i = 0; i < k; i++) {
-      cout << std::setfill('0') << std::setw(2) << (0xff & (unsigned int) buffer_in[i]) << " ";
-    }
-    cout << std::dec << endl;
-    
-    cout << "Got  " << std::hex;
-    for(int i = 0; i < k; i++) {
-      cout << std::setfill('0') << std::setw(2) << (0xff & (unsigned int) buffer_out[i]) << " ";
-    }
-    cout << std::dec << endl;
-
-    printf("Sent [%s], got back [%s]\n", an_input_string.c_str(), returned.c_str());
-
+    runTests(client);
     return 0;
 }

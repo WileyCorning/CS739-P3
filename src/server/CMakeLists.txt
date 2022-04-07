@@ -1,9 +1,12 @@
 
 add_executable(server server.cc
-        PrimaryReplication.cc
-        PrimaryReplication.cc
-        BackupReplication.cc
+        BackupServer.cc
         FileStorage.cc
+        HeartbeatHelper.cc
+        PairedServer.cc
+        PrimaryReplication.cc
+        PrimaryServer.cc
+        ReplicationModule.cc
 )
 target_link_libraries(
         server

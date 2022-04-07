@@ -30,20 +30,15 @@
 #include <thread>
 
 #include "../shared/CommonDefinitions.hh"
-#include "BackupReplication.hh"
+#include "PrimaryServer.hh"
+#include "BackupServer.hh"
+#include "PairedServer.hh"
+#include "HeartbeatHelper.hh"
 #include "FileStorage.hh"
-#include "NoReplication.hh"
-#include "PrimaryReplication.hh"
 #include "ReplicationModule.hh"
 #include "../cmake/build/blockstorage.grpc.pb.h"
 
 namespace fs = std::filesystem;
-using blockstorageproto::BlockStorage;
-using blockstorageproto::PingMessage;
-using blockstorageproto::ReadRequest;
-using blockstorageproto::ReadResponse;
-using blockstorageproto::WriteRequest;
-using blockstorageproto::WriteResponse;
 using grpc::Channel;
 using grpc::ClientContext;
 using grpc::Server;
@@ -54,43 +49,40 @@ using std::cout;
 using std::endl;
 using std::string;
 
-#define BLOCK_SIZE 4096
-#define WHOLE_FILE "whole_file"
 
-// Logic and data behind the server's behavior.
-class BlockStorageServiceImpl final : public BlockStorage::Service {
-    FileStorage *storage;
-    ReplicationModule *replication;
+// // Logic and data behind the server's behavior.
+// class BlockStorageServiceImpl final : public BlockStorage::Service {
+//     FileStorage *storage;
+//     ReplicationModule *replication;
 
-    Status Ping(ServerContext *context, const PingMessage *request, PingMessage *reply) override {
-        return Status::OK;
-    }
+//     Status Ping(ServerContext *context, const PingMessage *req, PingMessage *res) override {
+//         return Status::OK;
+//     }
 
-    Status Read(ServerContext *context, const ReadRequest *request, ReadResponse *reply) override {
-        char buffer[BLOCK_SIZE];
-        storage->read_data(request->address(), buffer);
-        reply->set_data(string(buffer, BLOCK_SIZE));
-        return Status::OK;
-    }
+//     Status Read(ServerContext *context, const ReadRequest *req, ReadResponse *res) override {
+//         char buffer[BLOCK_SIZE];
+//         storage->read_data(req->address(), buffer);
+//         res->set_data(string(buffer, BLOCK_SIZE));
+//         return Status::OK;
+//     }
 
-    Status Write(ServerContext *context, const WriteRequest *request, WriteResponse *reply) override {
-        auto data_str = request->data();
-        if (data_str.length() != BLOCK_SIZE) {
-            return Status(grpc::StatusCode::INVALID_ARGUMENT, "Block size should be " + std::to_string(BLOCK_SIZE) + " (was " + std::to_string(data_str.length()) + ")");
-        }
+//     Status Write(ServerContext *context, const WriteRequest *req, WriteResponse *res) override {
+//         auto data_str = req->data();
+//         if (data_str.length() != BLOCK_SIZE) {
+//             return Status(grpc::StatusCode::INVALID_ARGUMENT, "Block size should be " + std::to_string(BLOCK_SIZE) + " (was " + std::to_string(data_str.length()) + ")");
+//         }
 
-        storage->write_data(request->address(), request->data().c_str());
+//         storage->write_data(req->address(), req->data().c_str());
 
-        return Status::OK;
-    }
+//         return Status::OK;
+//     }
 
-   public:
-    BlockStorageServiceImpl(FileStorage *storage, ReplicationModule *replication) : storage(storage), replication(replication) {}
-};
+//    public:
+//     BlockStorageServiceImpl(FileStorage *storage, ReplicationModule *replication) : storage(storage), replication(replication) {}
+// };
 
-void RunServer(string port, FileStorage *storage, ReplicationModule *replication) {
+void RunServer(PairedServer* service, string port) {
     string server_address = "0.0.0.0:" + port;  // "0.0.0.0:50051"
-    BlockStorageServiceImpl service(storage, replication);
 
     grpc::EnableDefaultHealthCheckService(true);
     grpc::reflection::InitProtoReflectionServerBuilderPlugin();
@@ -99,69 +91,83 @@ void RunServer(string port, FileStorage *storage, ReplicationModule *replication
     builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
     // Register "service" as the instance through which we'll communicate with
     // clients. In this case it corresponds to an *synchronous* service.
-    builder.RegisterService(&service);
+    builder.RegisterService(service);
     // Finally assemble the server.
     std::unique_ptr<Server> server(builder.BuildAndStart());
     std::cout << "Server listening on " << server_address << std::endl;
     
-    replication->Initialize();
-
+    if(service->SafeGetState() == ReplState::Recovering) {
+        std::thread([service] { service->Recover(); }).detach();
+    }
+    
     // Wait for the server to shutdown. Note that some other thread must be
     // responsible for shutting down the server for this call to ever return.
     server->Wait();
-
-    replication->TearDown();
 }
 
 string argErrString(string name) {
-    return "Usage: " + name + " <port> ( standalone | primary --backup-address <backup-address> | backup --primary-address <primary-address> ) <storage_file>";
+    return "Usage: " + name + " <port> ( primary --backup-address <backup-address> | backup --primary-address <primary-address> ) <storage_file> [--recover]";
 }
 
-ReplicationModule *GetReplicationModule(string name, char **argv, size_t idx) {
-    auto value = string(argv[idx]);
-    if (value == "standalone")
-        return new NoReplication();
-
-    auto flag = string(argv[idx + 1]);
-    auto target = string(argv[idx + 2]);
-
-    if (value == "primary") {
-        if (flag != "--backup-address") {
-            throw std::runtime_error(argErrString(name));
-        }
-        return new PrimaryReplication(target);
+PairedServer* MakeServer(bool recovering, string kind, FileStorage* storage, std::shared_ptr<grpc::Channel> partnerChannel) {
+    auto replication = new ReplicationModule(partnerChannel);
+    if(kind == "primary") {
+        return new PrimaryServer(recovering ? ReplState::Recovering : ReplState::Standalone,storage,replication);
     }
-
-    if (value == "backup") {
-        if (flag != "--primary-address") {
-            throw std::runtime_error(argErrString(name));
-        }
-        return new BackupReplication(target);
+    if (kind == "backup") {
+        // Wait for the primary to come online before starting the backup
+        replication->PingOnce();
+        auto heartbeat = new HeartbeatHelper(partnerChannel);
+        return new BackupServer(ReplState::Recovering,storage,replication,heartbeat);
     }
-
-    throw std::runtime_error(argErrString(name));
+    throw std::runtime_error(argErrString(kind));
 }
 
 int main(int argc, char **argv) {
     string name = argv[0];
 
-    if (argc != 4 && argc != 6) {
+    if (argc != 6 && argc != 7) {
         cout << argErrString(name) << endl;
         return 1;
     }
 
     string port = argv[1];
-
+    
+    string kind = argv[2];
+    string specifier = argv[3];
+    
+    if(
+        (kind == "primary" && specifier != "--backup-address") ||
+        (kind == "backup" && specifier != "--primary-address")
+    ) {
+        cout << argErrString(name) << endl;
+        return 1;
+    }
+    
+    string target = argv[4];
+    
     auto is_standalone = string(argv[2]) == "standalone";
 
-    auto fname_storage = fs::weakly_canonical(string(argv[is_standalone ? 3 : 5]));
-
+    
+    bool is_recover = false;
+    if(argc > 6) {
+        if(string(argv[6]) != "--recover") {
+            cout << argErrString(name) << endl;
+            return 1;
+        }
+        is_recover = true;
+    }
+    
+    auto fname_storage = fs::weakly_canonical(string(argv[5]));
     cout << "Using storage file " << fname_storage << endl;
 
     auto storage = FileStorage(fname_storage);
     storage.init(STORAGE_FILE_SIZE_MB);
-    auto replication = GetReplicationModule(name, argv, 2);
+    
+    auto partnerChannel = grpc::CreateChannel(target, grpc::InsecureChannelCredentials());
+    
+    auto server = MakeServer(is_recover,kind,&storage,partnerChannel);
 
-    RunServer(port, &storage, replication);
+    RunServer(server,port);
     return 0;
 }
