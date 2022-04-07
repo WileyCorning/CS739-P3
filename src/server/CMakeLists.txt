@@ -4,7 +4,6 @@ add_executable(server server.cc
         FileStorage.cc
         HeartbeatHelper.cc
         PairedServer.cc
-        PrimaryReplication.cc
         PrimaryServer.cc
         ReplicationModule.cc
 )
