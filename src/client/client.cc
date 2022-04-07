@@ -51,16 +51,21 @@ using std::cout;
 using std::endl;
 
 #define BLOCK_SIZE 4096
+#define INSTANCE_5_IP "34.125.29.150:5678"
 #define INSTANCE_6_IP "34.102.79.216:5678"
 #define INSTANCE_7_IP "34.134.7.170:5678"
 #define CRASH_IP "9.9.9.9"
 
 /**
- *
+ * 
  * instance-5 : 34.125.29.150 - client
  * instance-6 : 34.102.79.216 - primary in the beginning
  * instance-7 : 34.134.7.170 - backup in the beginning
- * ./server/server 5678 standalone fs_1
+ * standalone: ./server/server 5678 primary --backup-address 0  fs_1
+ * 
+ * two servers
+ * on instance-5:  ./server/server 5678 primary --backup-address 34.102.79.216:5678  fs_1
+ * on instance-6: ./server/server 5678  backup --primary-address 34.125.29.150:5678  fs_1
  */
 class BlockStorageClient
 {
@@ -262,7 +267,8 @@ void readWriteBenchmark(BlockStorageClient &client, std::vector<std::string> &ra
 
 void runTests(BlockStorageClient &client)
 {
-    std::vector<long> str_lengths = {64, 256, 512, BLOCK_SIZE / 4, BLOCK_SIZE / 2, BLOCK_SIZE};
+    // std::vector<long> str_lengths = {64, 256, 512, BLOCK_SIZE / 4, BLOCK_SIZE / 2, BLOCK_SIZE};
+    std::vector<long> str_lengths = {BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE};
     std::vector<std::string> random_strs;
     std::vector<long> random_offsets;
     for (auto &&i : str_lengths)
@@ -308,7 +314,7 @@ void runTests(BlockStorageClient &client)
 
 int main(int argc, char **argv)
 {
-    std::string target_str(INSTANCE_6_IP);
+    std::string target_str(INSTANCE_5_IP);
     BlockStorageClient client(grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials()));
     runTests(client);
     return 0;
