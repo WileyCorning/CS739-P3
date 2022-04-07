@@ -100,18 +100,50 @@ Status BackupServer::Write(ServerContext *context, const WriteRequest *req, Writ
     auto data = data_str.c_str();
 
     storage->write_data(address, data);
+
+#ifdef INCLUDE_CRASH_POINTS
+    if (address == PREP_CRASH_ON_MESSAGE) {
+        crash_flag = true;
+    } else if (crash_flag) {
+        if(address == CRASH_PRIMARY_BEFORE_BACKUP) {
+            crash();
+        } else if (address == PREP_CRASH_ON_NEXT_RECOVER) {
+            make_crash_sentinel();
+        }
+    }
+#endif
+
     replication->MarkDirty(address);
+
+#ifdef INCLUDE_CRASH_POINTS
+    if (crash_flag && address == CRASH_PRIMARY_AFTER_WRITE) {
+        crash_after(1);
+    }
+#endif
 
     return Status::OK;
 }
 
 Status BackupServer::BackupWrite(ServerContext *context, const BackupWriteRequest *req, Ack *res) {
+    auto address = req->address();
+    
+#ifdef INCLUDE_CRASH_POINTS
+    if (crash_flag && address == CRASH_BACKUP_DURING_BACKUP) {
+        crash();
+    }
+#endif
+
     switch (SafeGetState()) {
         case ReplState::Normal:
             // Commit data to disk
-            storage->write_data(req->address(), req->data().c_str());
-            return Status::OK;
+            storage->write_data(address, req->data().c_str());
 
+#ifdef INCLUDE_CRASH_POINTS
+            if (crash_flag && address == CRASH_BACKUP_DURING_BACKUP) {
+                crash_after(1);
+            }
+            return Status::OK;
+#endif
         case ReplState::Standalone:
             cout << "Assumption violated: Backup node received a replication message while acting as standalone." << endl;
             cout << "Both nodes are servicing client reqs. This suggests that a network partition has occurred." << endl;
@@ -120,6 +152,7 @@ Status BackupServer::BackupWrite(ServerContext *context, const BackupWriteReques
         case ReplState::Recovering:
             // Assume that we've restarted without the primary knowing about it;
             // therefore, fail this req, which will send the primary into Standalone if it wasn't already.
+
             return Status(StatusCode::UNAVAILABLE, "recovering");
         default:
             throw std::runtime_error("Invalid enum value");
@@ -128,8 +161,8 @@ Status BackupServer::BackupWrite(ServerContext *context, const BackupWriteReques
 
 void BackupServer::HandlePartnerRecovered() {
     PairedServer::HandlePartnerRecovered();
-    
+
     std::thread([this] { heartbeat->Start(this); }).detach();
 }
 
-BackupServer::BackupServer(ReplState initState, FileStorage *storage, ReplicationModule *replication, HeartbeatHelper* heartbeat) : PairedServer(initState, storage, replication), heartbeat(heartbeat) {}
+BackupServer::BackupServer(ReplState initState, FileStorage *storage, ReplicationModule *replication, HeartbeatHelper *heartbeat) : PairedServer(initState, storage, replication), heartbeat(heartbeat) {}

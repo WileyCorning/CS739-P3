@@ -22,6 +22,7 @@
 #include "FileStorage.hh"
 #include "PairedServer.hh"
 #include "ReplicationModule.hh"
+#include "Crash.hh"
 
 namespace fs = std::filesystem;
 using blockstorageproto::BlockStorage;
@@ -42,6 +43,8 @@ using std::endl;
 using std::string;
 
 class PrimaryServer : public PairedServer {
+    bool crash_flag = false;
+    
     virtual Status Heartbeat(ServerContext *context, const HeartbeatMessage *req, HeartbeatMessage *res) override;
     virtual Status Read(ServerContext *context, const ReadRequest *req, ReadResponse *res) override;
     virtual Status Write(ServerContext *context, const WriteRequest *req, WriteResponse *res) override;

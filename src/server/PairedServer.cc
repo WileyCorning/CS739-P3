@@ -22,6 +22,7 @@
 #include "FileStorage.hh"
 #include "ReplicationModule.hh"
 
+
 namespace fs = std::filesystem;
 using blockstorageproto::Ack;
 using blockstorageproto::BackupWriteRequest;
@@ -143,6 +144,13 @@ Status PairedServer::FinishSync(ServerContext *context, const FinishSyncRequest 
         cout << "Recovery failed: expected " << req->total_blocks() << " blocks, got " << recovery.blocks_received << endl;
         return Status(StatusCode::ABORTED, "incomplete sync");
     }
+    
+#ifdef INCLUDE_CRASH_POINTS
+    if(has_crash_sentinel()) {
+        clear_crash_sentinel();
+        crash();
+    }
+#endif
     
     // Go to normal operation
     recovery.done = true;

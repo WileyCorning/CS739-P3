@@ -21,6 +21,7 @@
 #include "../shared/CommonDefinitions.hh"
 #include "FileStorage.hh"
 #include "ReplicationModule.hh"
+#include "Crash.hh"
 
 namespace fs = std::filesystem;
 using blockstorageproto::Ack;
@@ -80,10 +81,6 @@ class PairedServer : public BlockStorage::Service {
     virtual Status TriggerSync(ServerContext *context, const TriggerSyncRequest *req, Ack *res) override;
     virtual Status SyncBlock(ServerContext *context, const SyncBlockRequest *req, Ack *res) override;
     virtual Status FinishSync(ServerContext *context, const FinishSyncRequest *req, Ack *res) override;
-    // virtual Status Heartbeat(ServerContext *context, const HeartbeatMessage *req, HeartbeatMessage *res) override;
-    // virtual Status Read(ServerContext *context, const ReadRequest *req, ReadResponse *res) override;
-    // virtual Status Write(ServerContext *context, const WriteRequest *req, WriteResponse *res) override;
-    // virtual Status BackupWrite(ServerContext *context, const BackupWriteRequest *req, Ack *res) override;
 
     FileStorage *storage;
     ReplicationModule *replication;

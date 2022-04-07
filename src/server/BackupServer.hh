@@ -23,6 +23,7 @@
 #include "HeartbeatHelper.hh"
 #include "PairedServer.hh"
 #include "ReplicationModule.hh"
+#include "Crash.hh"
 
 namespace fs = std::filesystem;
 using blockstorageproto::Ack;
@@ -48,6 +49,7 @@ using std::endl;
 using std::string;
 
 class BackupServer : public PairedServer {
+    bool crash_flag = false;
     HeartbeatHelper* heartbeat;
 
     virtual Status FinishSync(ServerContext *context, const FinishSyncRequest *req, Ack *res) override;
