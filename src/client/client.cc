@@ -227,37 +227,37 @@ void readWriteBenchmark(BlockStorageClient &client, std::vector<std::string> &ra
             cout << "write & read don't match!" << endl;
         }
    }
-    // measuring time for 100 writes
-    // std::string 4KB_input_string = random_strs[5];
-    // char buffer_in_4KB[BLOCK_SIZE] = {};
-    // char buffer_out_4KB[BLOCK_SIZE] = {};
-    // std::memcpy(buffer_in_4KB, 4KB_input_string.data(), 4KB_input_string.length());
+    //measuring time for 100 writes
+    std::string KB_input_string = random_strs[5];
+    char buffer_in_4KB[BLOCK_SIZE] = {};
+    char buffer_out_4KB[BLOCK_SIZE] = {};
+    std::memcpy(buffer_in_4KB, KB_input_string.data(), KB_input_string.length());
 
-    // uint64_t offset;
-    // auto start = std::chrono::high_resolution_clock::now();
-    // for (int i = 0; i < 100; i++)
-    // {
+    uint64_t offset;
+    auto start = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < 100; i++)
+    {
         
-    // client->Write(offset, buffer_in_4KB, BLOCK_SIZE);
-    // offset += 4096;
-    // }
-    //  auto end = std::chrono::high_resolution_clock::now();
-    //  std::chrono::duration<double, std::milli> duration = end - start;
-    //  cout << "time spent on 100 4KB writes  " << duration.count() << " ms." << endl;
+    client->Write(offset, buffer_in_4KB, BLOCK_SIZE);
+    offset += 4096;
+    }
+     auto end = std::chrono::high_resolution_clock::now();
+     std::chrono::duration<double, std::milli> duration = end - start;
+     cout << "time spent on 100 4KB writes  " << duration.count() << " ms." << endl;
          
-    // //measuring time for 100 reads
+    // measuring time for 100 reads
     
-    // offset = 0;
-    // auto start = std::chrono::high_resolution_clock::now();
-    // for (int i = 0; i < 100; i++)
-    // {
+    offset = 0;
+    auto start = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < 100; i++)
+    {
         
-    // client.Read(offset, buffer_out_4KB, BLOCK_SIZE);
-    // offset += 4096;
-    // }
-    //  auto end = std::chrono::high_resolution_clock::now();
-    //  std::chrono::duration<double, std::milli> duration = end - start;
-    //  cout << "time spent on 100 4KB reads  " << duration.count() << " ms." << endl;
+    client.Read(offset, buffer_out_4KB, BLOCK_SIZE);
+    offset += 4096;
+    }
+     auto end = std::chrono::high_resolution_clock::now();
+     std::chrono::duration<double, std::milli> duration = end - start;
+     cout << "time spent on 100 4KB reads  " << duration.count() << " ms." << endl;
 }
 
 void runTests(BlockStorageClient &client)
