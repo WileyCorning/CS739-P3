@@ -6,6 +6,7 @@ add_executable(server server.cc
         PairedServer.cc
         PrimaryServer.cc
         ReplicationModule.cc
+        Crash.cc
 )
 target_link_libraries(
         server

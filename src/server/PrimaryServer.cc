@@ -13,7 +13,6 @@
 #include <iostream>
 #include <memory>
 #include <shared_mutex>
-#include <exception>
 #include <string>
 #include <thread>
 
@@ -28,6 +27,7 @@ using blockstorageproto::Ack;
 using blockstorageproto::BackupWriteRequest;
 using blockstorageproto::BlockStorage;
 using blockstorageproto::FinishSyncRequest;
+using blockstorageproto::HeartbeatMessage;
 using blockstorageproto::PingMessage;
 using blockstorageproto::ReadRequest;
 using blockstorageproto::ReadResponse;
@@ -35,14 +35,13 @@ using blockstorageproto::SyncBlockRequest;
 using blockstorageproto::TriggerSyncRequest;
 using blockstorageproto::WriteRequest;
 using blockstorageproto::WriteResponse;
-using blockstorageproto::HeartbeatMessage;
 using grpc::Channel;
 using grpc::ClientContext;
 using grpc::Server;
 using grpc::ServerBuilder;
 using grpc::ServerContext;
-using grpc::StatusCode;
 using grpc::Status;
+using grpc::StatusCode;
 using std::cout;
 using std::endl;
 using std::string;
@@ -95,8 +94,29 @@ Status PrimaryServer::Write(ServerContext *context, const WriteRequest *req, Wri
     auto address = req->address();
     auto data = data_str.c_str();
 
+    // Persist data locally before sending to backup
     storage->write_data(address, data);
+    
+
+#ifdef INCLUDE_CRASH_POINTS
+    if (address == PREP_CRASH_ON_MESSAGE) {
+        crash_flag = true;
+    } else if (crash_flag) {
+        if(address == CRASH_PRIMARY_BEFORE_BACKUP) {
+            crash();
+        } else if (address == PREP_CRASH_ON_NEXT_RECOVER) {
+            make_crash_sentinel();
+        }
+    }
+#endif
+
     BackupIfPossible(address, data);
+
+#ifdef INCLUDE_CRASH_POINTS
+    if (crash_flag && address == CRASH_PRIMARY_AFTER_WRITE) {
+        crash_after(1);
+    }
+#endif
 
     return Status::OK;
 }
@@ -125,7 +145,7 @@ void PrimaryServer::BackupIfPossible(uint64_t address, const char *data) {
 
 Status PrimaryServer::BackupWrite(ServerContext *context, const BackupWriteRequest *req, Ack *res) {
     // Primary should never receive these
-    return Status(StatusCode::FAILED_PRECONDITION,"invalid target");
+    return Status(StatusCode::FAILED_PRECONDITION, "invalid target");
 }
 
 PrimaryServer::PrimaryServer(ReplState initState, FileStorage *storage, ReplicationModule *replication) : PairedServer(initState, storage, replication) {}
