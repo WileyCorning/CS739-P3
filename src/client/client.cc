@@ -176,7 +176,7 @@ void run_main(BlockStorageClient *client, uint64_t prep, uint64_t target) {
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double, std::milli> duration = end - start;
 
-        std::string returned(buffer_out, payload2.length());
+        std::string returned(buffer_out, payload1.length());
 
         if (payload1 == returned) {
             cout << "[iter " << i << "] OK: took " << duration.count() << "ms" << endl;
