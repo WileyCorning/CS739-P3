@@ -278,8 +278,8 @@ void runTests(BlockStorageClient &client)
     srand((unsigned)time(NULL));
     for (int i = 0; i < str_lengths.size(); i++)
     {
-        random_offsets.push_back(rand()); // unaligned
-        // random_offsets.push_back(i * BLOCK_SIZE); // 4k-aligned
+        // random_offsets.push_back(rand()); // unaligned
+        random_offsets.push_back(i * BLOCK_SIZE); // 4k-aligned
     }
 
     readWriteBenchmark(client, random_strs, random_offsets);
