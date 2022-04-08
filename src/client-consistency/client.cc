@@ -90,10 +90,10 @@ class BlockStorageClient {
             request.set_data(data_str);
 
             if (use_backup) {
-                printf("Write (to Backup)");
+                printf("Write (to Backup)\n");
                 status = stub_backup->Write(&context, request, &reply);
             } else {
-                printf("Write (to Primary)");
+                printf("Write (to Primary)\n");
                 status = stub_primary->Write(&context, request, &reply);
             }
             if (!status.ok()) {
@@ -117,10 +117,10 @@ class BlockStorageClient {
             request.set_address(address);
             ClientContext context;
             if (use_backup) {
-                printf("Read (from Backup)");
+                printf("Read (from Backup)\n");
                 status = stub_backup->Read(&context, request, &reply);
             } else {
-                printf("Read (from Primary)");
+                printf("Read (from Primary)\n");
                 status = stub_primary->Read(&context, request, &reply);
             }
             if (!status.ok()) {

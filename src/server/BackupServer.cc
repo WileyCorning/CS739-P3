@@ -128,6 +128,9 @@ Status BackupServer::BackupWrite(ServerContext *context, const BackupWriteReques
     auto address = req->address();
     
 #ifdef INCLUDE_CRASH_POINTS
+    if (address == PREP_CRASH_ON_MESSAGE_BACKUP) {
+        crash_flag = true;
+    }
     if (crash_flag && address == CRASH_BACKUP_DURING_BACKUP) {
         crash();
     }
