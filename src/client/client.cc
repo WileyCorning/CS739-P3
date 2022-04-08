@@ -166,13 +166,12 @@ std::string strRand(int length) {
 void run_main(BlockStorageClient *client, uint64_t prep, uint64_t target) {
     for (int i = 0; i < 10; i++) {
         auto payload1 = strRand(BLOCK_SIZE);
-        // auto payload2 = strRand(BLOCK_SIZE);
         char buffer_out[BLOCK_SIZE] = {};
 
         auto start = std::chrono::high_resolution_clock::now();
         client->Write(prep, payload1.c_str(), BLOCK_SIZE);
         // client->Write(target, payload2.c_str(), BLOCK_SIZE);
-        client->Read(target, buffer_out, BLOCK_SIZE);
+        client->Read(prep, buffer_out, BLOCK_SIZE);
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double, std::milli> duration = end - start;
 
