@@ -166,7 +166,7 @@ std::string strRand(int length) {
 void run_main(BlockStorageClient *client, uint64_t prep, uint64_t target) {
     for (int i = 0; i < 10; i++) {
         auto payload1 = strRand(BLOCK_SIZE);
-        auto payload2 = strRand(BLOCK_SIZE);
+        // auto payload2 = strRand(BLOCK_SIZE);
         char buffer_out[BLOCK_SIZE] = {};
 
         auto start = std::chrono::high_resolution_clock::now();
@@ -178,7 +178,7 @@ void run_main(BlockStorageClient *client, uint64_t prep, uint64_t target) {
 
         std::string returned(buffer_out, payload2.length());
 
-        if (payload2 == returned) {
+        if (payload1 == returned) {
             cout << "[iter " << i << "] OK: took " << duration.count() << "ms" << endl;
         } else {
             cout << "[iter " << i << "] inconsistent!" << endl;
