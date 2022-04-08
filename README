@@ -1,0 +1,94 @@
+> 1.1 Replication Strategy
+> 
+> - Pick the replication strategy (note use a fixed number of nodes and keep it minimal, e.g., 2 for P/B, 3 for Paxos/Raft)
+
+Primary/Backup with two nodes. Key code is in:
+- `src/server/PairedServer.cc`,
+- `src/server/PrimaryServer.cc`,
+- `src/server/BackupServer.cc`.
+
+> - In different situations, which set of the servers can a client access?
+
+See Sections 1.1 and 1.3 in `report.pdf`.
+
+On the client-side, code for switching between servers can be found in `src/client-consistency/client.cc` in the `Read` and `Write` methods.
+
+> - When issuing replication? Consider how it relates to the time of replying and time of durability.
+
+Data is fully persisted to disk and replicated to the backup before replying to the client. See the `Write` method in `src/server/PrimaryServer.cc`.
+
+> - The semantics of this Replicated Block Store: no matter which replication strategy you choose, because <=1 node will crash, the crash should not be visible to the users. (You could do something in the client library, but not necessarily)
+
+See Section 1.3 in `report.pdf`.
+
+On the client-side, code for switching between servers can be found in `src/client-consistency/client.cc` in the `Read` and `Write` methods. This switching and retry mechanism, coupled with the state transition logic (e.g. in `src/server/BackupServer.cc`'s `Write` method and `src/server/HeatbeatHelper.cc`), keeps crashes hidden.
+
+> 1.2 Durability
+> 
+> - The disk data organization/format, and how you ensure the durability. (recall ALICE)
+
+See Section 1.2 in `report.pdf`.
+
+A single large file is used to store all data on disk. Relevant code is in `src/server/FileStorage.cc`.
+
+> 1.3 Crash Recovery Protocol
+> - How to handle clients’ traffic? How to ensure strong consistency?
+
+Strong consistency is ensured by our crash recovery protocol (Section 1.3) and by the use of locks to handle concurrent requsts around state transitions. Relevant code is in `src/server/PairedServer.cc`.
+
+> - How to handle the whole transition from N nodes to N-1 nodes, and back to N nodes again? If you chose an asymmetric replication scheme (i.e. Primary/Backup), any difference if the crashed one is the primary or the backup?
+
+See Section 1.3 in `report.pdf`.
+
+When one node crashes, the other acts as a standalone server and keeps a list of updated addresses. When the crashed node restarts, it requests resynchronization and is sent the updated blocks before resuming its normal function. The crash recovery protocol is symmetrical, and is primarily implemented in `src/server/PairedServer.cc` and `src/server/ReplicationModule.cc`.
+
+> 2.1 Correctness
+> - Availability
+
+See Section 2.1 in `report.pdf`.
+
+Relevant code is in `src/client-consistency/client.cc`, `src/server/Crash.cc`, and at the crash points in `src/server/PrimaryServer.cc` and `src/server/BackupServer.cc`.
+
+> - Strong Consistency
+
+See Section 2.1 in `report.pdf`.
+
+The tests in `src/client-consistency/client.cc` are relevant.
+
+> - Testing Strategy
+
+Relevant sections and code are listed in the above two bullet points.
+
+Crash pponts tested:
+- Between storing data on the primary’s disk and sending it to the backup
+- Asynchronously, after finishing a write on the primary
+- Between storing data on the backup’s disk and exiting the backup-write RPC
+- Asynchronously, after finishing a backup-write on the backup
+- Just before the end of the recovery process
+
+We performed a live demo of these features during our presentation to Remzi.
+
+> 2.2 Performance
+> - What’s the latency of read/write? How does it compare with the single-server case? What’s the latency of read/write if a crash happens?
+
+See Section 2.2 in `report.pdf`.
+
+Latency is approximately ~125ms from a home laptop to the cloud VM. The single-server case is approximately 5-10ms faster. In the event of a crash, latency increases to ~500-600ms for the first request as the client is redirected one or more times.
+
+> - What’s the recovery time? Use a graph to show. What will influence your recovery time, put it into the graph.
+
+Recovery takes around 1000ms, although we do not have precise measurements at this time. Most of that time appears to be spent acquiring the socket and initializing gRPC; we would expect the recovery time to increase with the number of distinct addresses that have been written on the other server while it was standalone.
+
+> - Further, annotate different phases after a crash in a timeline (e.g., failover, sync data, reintegration) – latency measurement and show what’s happening in your system by this approach. (E.g., Figure11 in this paper)
+
+See figures in Section 1.3 of `report.pdf`
+
+> - What’s the performance difference between 4K-aligned-address vs. unaligned-address requests? (Your interface should support arbitrary offset, assuming <= 256GB)
+
+There was no observable difference.
+
+See Section 2.2 of `report.pdf`, and measurement code in `src/client/client.cc`.
+
+> - Note the API semantics is the user will always want 4K, which may or may not be the same as how you actually implemented the interface. This is one kind of the art of an API.
+
+We implemented the API to always require 4KB blocks to be written, and always return 4KB blocks from reads. This is enforced by checks on the server side.

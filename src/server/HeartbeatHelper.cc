@@ -18,18 +18,18 @@
 
 #include "../cmake/build/blockstorage.grpc.pb.h"
 #include "../shared/CommonDefinitions.hh"
-#include "FileStorage.hh"
 #include "BackupServer.hh"
+#include "FileStorage.hh"
 #include "ReplicationModule.hh"
 
 namespace fs = std::filesystem;
 using blockstorageproto::BlockStorage;
+using blockstorageproto::HeartbeatMessage;
 using blockstorageproto::PingMessage;
 using blockstorageproto::ReadRequest;
 using blockstorageproto::ReadResponse;
 using blockstorageproto::WriteRequest;
 using blockstorageproto::WriteResponse;
-using blockstorageproto::HeartbeatMessage;
 using grpc::Channel;
 using grpc::ClientContext;
 using grpc::Server;
@@ -39,8 +39,6 @@ using grpc::Status;
 using std::cout;
 using std::endl;
 using std::string;
-
-
 
 HeartbeatHelper::HeartbeatHelper(std::shared_ptr<Channel> channel) : stub_(BlockStorage::NewStub(channel)) {}
 
@@ -61,7 +59,7 @@ void HeartbeatHelper::Start(BackupServer* server) {
 
     bool ok = HeartbeatOnce();
     while (iter == my_iter && ok) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(HEARTBEAT_INTERVAL_MS));
+        std::this_thread::sleep_for(std::chrono::milliseconds(HEARTBEAT_INTERVAL_MS));
         ok = HeartbeatOnce();
     }
 
