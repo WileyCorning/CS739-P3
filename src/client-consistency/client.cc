@@ -78,17 +78,17 @@ class BlockStorageClient {
         if (n != BLOCK_SIZE) {
             throw std::runtime_error("Block size should be " + std::to_string(BLOCK_SIZE) + " (was " + std::to_string(n) + ")");
         }
-        WriteRequest request;
-        WriteResponse reply;
         Status status;
-        ClientContext context;
 
         std::string data_str(buffer, n);
 
-        request.set_address(address);
-        request.set_data(data_str);
-
         do {
+            ClientContext context;
+            WriteRequest request;
+            WriteResponse reply;
+            request.set_address(address);
+            request.set_data(data_str);
+
             if (use_backup) {
                 printf("Write (to Backup)");
                 status = stub_backup->Write(&context, request, &reply);
@@ -107,15 +107,15 @@ class BlockStorageClient {
             throw std::runtime_error("Block size should be " + std::to_string(BLOCK_SIZE) + " (was " + std::to_string(n) + ")");
         }
 
-        ReadRequest request;
-        ReadResponse reply;
         Status status;
 
-        ClientContext context;
 
-        request.set_address(address);
+        ReadResponse reply;
 
         do {
+            ReadRequest request;
+            request.set_address(address);
+            ClientContext context;
             if (use_backup) {
                 printf("Read (from Backup)");
                 status = stub_backup->Read(&context, request, &reply);
@@ -139,7 +139,7 @@ class BlockStorageClient {
    private:
     std::unique_ptr<BlockStorage::Stub> stub_primary;
     std::unique_ptr<BlockStorage::Stub> stub_backup;
-    bool use_backup;
+    bool use_backup = false;
 };
 
 // gererate a string of a specific length
@@ -253,13 +253,13 @@ void readWriteBenchmark(BlockStorageClient &client, std::vector<std::string> &ra
 }
 
 
-void run_main(BlockStorageClient *client, uint64_t target) {
+void run_main(BlockStorageClient *client, uint64_t prep, uint64_t target) {
     for (int i = 0; i < 10; i++) {
         auto payload1 = strRand(BLOCK_SIZE);
         auto payload2 = strRand(BLOCK_SIZE);
         char buffer_out[BLOCK_SIZE] = {};
 
-        client->Write(PREP_CRASH_ON_MESSAGE, payload1.c_str(), BLOCK_SIZE);
+        client->Write(prep, payload1.c_str(), BLOCK_SIZE);
         auto start = std::chrono::high_resolution_clock::now();
         client->Write(target, payload2.c_str(), BLOCK_SIZE);
         client->Read(target, buffer_out, BLOCK_SIZE);
@@ -276,7 +276,7 @@ void run_main(BlockStorageClient *client, uint64_t target) {
     }
 }
 
-void run_rest(BlockStorageClient *client, uint64_t target) {
+void run_rest(BlockStorageClient *client, uint64_t prep, uint64_t target) {
     for (int i = 0; i < 10; i++) {
         auto payload1 = strRand(BLOCK_SIZE);
         auto payload2 = strRand(BLOCK_SIZE);
@@ -284,7 +284,7 @@ void run_rest(BlockStorageClient *client, uint64_t target) {
         char buffer_out[BLOCK_SIZE] = {};
 
         client->Write(PREP_CRASH_ON_NEXT_RECOVER, payload1.c_str(), BLOCK_SIZE);
-        client->Write(PREP_CRASH_ON_MESSAGE, payload2.c_str(), BLOCK_SIZE);
+        client->Write(prep, payload2.c_str(), BLOCK_SIZE);
         auto start = std::chrono::high_resolution_clock::now();
         client->Write(target, payload2.c_str(), BLOCK_SIZE);
         client->Read(target, buffer_out, BLOCK_SIZE);
@@ -304,32 +304,32 @@ void run_rest(BlockStorageClient *client, uint64_t target) {
 
 void seq0(BlockStorageClient *client) {
     cout << "Crashing primary during write, before calling backup" << endl;
-    run_main(client, CRASH_PRIMARY_BEFORE_BACKUP);
+    run_main(client,PREP_CRASH_ON_MESSAGE_PRIMARY, CRASH_PRIMARY_BEFORE_BACKUP);
 }
 
 void seq1(BlockStorageClient* client) {
     cout << "Crashing primary after write" << endl;
-    run_main(client, CRASH_PRIMARY_AFTER_WRITE);
+    run_main(client,PREP_CRASH_ON_MESSAGE_PRIMARY, CRASH_PRIMARY_AFTER_WRITE);
 }
 
 void seq2(BlockStorageClient *client) {
     cout << "Crashing backup during backup" << endl;
-    run_main(client, CRASH_BACKUP_DURING_BACKUP);
+    run_main(client,PREP_CRASH_ON_MESSAGE_BACKUP, CRASH_BACKUP_DURING_BACKUP);
 }
 
 void seq3(BlockStorageClient *client) {
     cout << "Crashing backup after backup" << endl;
-    run_main(client, CRASH_BACKUP_AFTER_BACKUP);
+    run_main(client,PREP_CRASH_ON_MESSAGE_BACKUP, CRASH_BACKUP_AFTER_BACKUP);
 }
 
 void seq4(BlockStorageClient *client) {
     cout << "Crashing primary once, then again as it recovers" << endl;
-    run_rest(client, CRASH_PRIMARY_BEFORE_BACKUP);
+    run_rest(client,PREP_CRASH_ON_MESSAGE_PRIMARY, CRASH_PRIMARY_BEFORE_BACKUP);
 }
 
 void seq5(BlockStorageClient *client) {
     cout << "Crashing backup once, then again as it recovers" << endl;
-    run_rest(client, CRASH_BACKUP_DURING_BACKUP);
+    run_rest(client,PREP_CRASH_ON_MESSAGE_BACKUP, CRASH_BACKUP_DURING_BACKUP);
 }
 
 void runTests(BlockStorageClient &client) {

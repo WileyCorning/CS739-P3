@@ -102,7 +102,7 @@ Status BackupServer::Write(ServerContext *context, const WriteRequest *req, Writ
     storage->write_data(address, data);
 
 #ifdef INCLUDE_CRASH_POINTS
-    if (address == PREP_CRASH_ON_MESSAGE) {
+    if (address == PREP_CRASH_ON_MESSAGE_BACKUP) {
         crash_flag = true;
     } else if (crash_flag) {
         if(address == CRASH_PRIMARY_BEFORE_BACKUP) {

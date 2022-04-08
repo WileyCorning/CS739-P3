@@ -99,7 +99,7 @@ Status PrimaryServer::Write(ServerContext *context, const WriteRequest *req, Wri
     
 
 #ifdef INCLUDE_CRASH_POINTS
-    if (address == PREP_CRASH_ON_MESSAGE) {
+    if (address == PREP_CRASH_ON_MESSAGE_PRIMARY) {
         crash_flag = true;
     } else if (crash_flag) {
         if(address == CRASH_PRIMARY_BEFORE_BACKUP) {
