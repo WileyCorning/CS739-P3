@@ -58,3 +58,4 @@ target_link_libraries(hw_grpc_proto
 
 add_subdirectory(server)
 add_subdirectory(client)
+add_subdirectory(client-consistency)
